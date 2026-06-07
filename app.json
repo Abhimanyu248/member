@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "GymPro Member",
+    "slug": "gympro-member",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#F4EFE7"
+    },
+    "ios": {
+      "userInterfaceStyle": "automatic",
+      "splash": {
+        "backgroundColor": "#F4EFE7",
+        "dark": {
+          "backgroundColor": "#141A22"
+        }
+      }
+    },
+    "android": {
+      "userInterfaceStyle": "automatic",
+      "splash": {
+        "backgroundColor": "#F4EFE7",
+        "dark": {
+          "backgroundColor": "#141A22"
+        }
+      }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ]
+  }
+}
