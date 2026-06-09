@@ -14,10 +14,8 @@ export const calculateDaysLeft = (expiryDate) => {
   if (Number.isNaN(expiry.getTime())) return null;
 
   const today = new Date();
-  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const expiryStart = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate());
 
-  return Math.ceil((expiryStart - todayStart) / (1000 * 60 * 60 * 24));
+  return Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
 };
 
 export const getMembershipStatus = (member) => {

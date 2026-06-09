@@ -174,6 +174,15 @@ export default function DashboardScreen() {
                 {member.gender?.toUpperCase() || 'MEMBER'}
               </Text>
             </View>
+
+            {member.batch && (
+              <View style={styles.dashboardHeroMetaItem}>
+                <Clock color="#DFF8EE" size={18} />
+                <Text style={styles.dashboardHeroMetaText} numberOfLines={1}>
+                  {member.batch.toUpperCase()}
+                </Text>
+              </View>
+            )}
             
             {/* <View style={styles.dashboardHeroMetaItem}>
               <CreditCard color="#DFF8EE" size={18} />
@@ -255,6 +264,7 @@ export default function DashboardScreen() {
           <InfoRow Icon={Phone} label="Phone Number" value={String(member.phone || '-')} colors={colors} />
           <InfoRow Icon={Mail} label="Email Address" value={member.email || '-'} colors={colors} />
           <InfoRow Icon={CalendarDays} label="Joining Date" value={formatDate(member.joinDate)} colors={colors} />
+          <InfoRow Icon={Clock} label="Batch" value={member.batch ? (member.batch.charAt(0).toUpperCase() + member.batch.slice(1)) : '-'} colors={colors} />
           <InfoRow
             Icon={CreditCard}
             label="Plan Duration"
