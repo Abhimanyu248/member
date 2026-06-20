@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://10.138.122.148:3000/api';
+const API_BASE_URL = 'http://10.59.202.148:3000/api';
 // const API_BASE_URL = 'https://backend-txff.onrender.com/api';
 const LAST_PHONE_KEY = 'member_last_phone';
 const AUTH_TOKEN_KEY = 'member_auth_token';
@@ -46,11 +46,11 @@ class MemberApiService {
     return data;
   }
 
-  async loginMember(phone, password) {
+  async loginMember(phone, password, memberId = null) {
     const cleanedPhone = String(phone || '').replace(/\D/g, '');
     const data = await this.request('/member-portal/login', {
       method: 'POST',
-      body: JSON.stringify({ phone: cleanedPhone, password }),
+      body: JSON.stringify({ phone: cleanedPhone, password, memberId }),
     });
     // Persist the phone and the JWT token returned from login
     await AsyncStorage.setItem(LAST_PHONE_KEY, cleanedPhone);
@@ -78,12 +78,45 @@ class MemberApiService {
     });
   }
 
+
   async getLastPhone() {
     return AsyncStorage.getItem(LAST_PHONE_KEY);
   }
 
   async clearLastPhone() {
     await AsyncStorage.removeItem(LAST_PHONE_KEY);
+  }
+
+  async getDietPlan() {
+    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) return null;
+    return this.request('/diet/current', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  }
+
+  async generateDietPlan(payload) {
+    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) return null;
+    return this.request('/diet/generate', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async replaceDietMeal(payload) {
+    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) return null;
+    return this.request('/diet/replace-meal', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
   }
 
   // Call this on logout to fully clear the session

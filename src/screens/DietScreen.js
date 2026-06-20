@@ -6,6 +6,7 @@ import {
   View,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,11 +26,15 @@ import {
   AlertCircle,
   Zap,
   ArrowLeft,
+  RefreshCw,
+  Scale,
+  Calculator,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 
 import { getMemberStyles } from '../styles/memberStyles';
 import { useAppContext } from '../context/AppContext';
+import { memberApi } from '../utils/api';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -84,53 +89,48 @@ function getMacros(calories, style) {
   };
 }
 
-// ─── Diet plan generator ──────────────────────────────────────────────────────
+// ─── Diet plan mapper ─────────────────────────────────────────────────────────
 
-function generatePlan(goal, calories, style, foodPref) {
-  const macros = getMacros(calories, style);
-  const isVeg = foodPref === 'veg';
+function mapBackendPlan(backendPlan, goal, dietStyle, foodPref) {
+  if (!backendPlan) return null;
 
-  const proteinSources = isVeg
-    ? ['Paneer', 'Tofu', 'Lentils (dal)', 'Chickpeas', 'Greek yogurt', 'Cottage cheese', 'Eggs']
-    : ['Chicken breast', 'Eggs', 'Fish (salmon/tuna)', 'Lean beef', 'Paneer', 'Shrimp', 'Turkey'];
+  const breakfast = backendPlan.breakfast || {};
+  const lunch = backendPlan.lunch || {};
+  const snacks = backendPlan.snacks || {};
+  const postWorkout = backendPlan.postWorkout || {};
+  const dinner = backendPlan.dinner || {};
 
-  const carbSources = ['Brown rice', 'Oats', 'Sweet potato', 'Quinoa', 'Whole wheat roti', 'Banana', 'Fruits'];
-  const fatSources  = ['Avocado', 'Almonds', 'Walnuts', 'Olive oil', 'Ghee (small amount)', 'Flaxseeds', 'Chia seeds'];
+  const activeGoal = backendPlan.goal || goal || 'maintain';
+  const activeStyle = backendPlan.dietStyle || dietStyle || 'balanced';
+  const activePref = backendPlan.dietType || foodPref || (breakfast.veg ? 'veg' : 'non_veg');
 
-  const mealTemplates = {
-    high_fat: [
-      { time: 'Breakfast', name: isVeg ? 'Paneer scramble + Avocado'              : 'Eggs + Avocado + Cheese',            kcal: Math.round(calories * 0.28) },
-      { time: 'Lunch',     name: isVeg ? 'Tofu salad with olive oil dressing'     : 'Grilled chicken salad with olive oil', kcal: Math.round(calories * 0.35) },
-      { time: 'Snack',     name: 'Handful of mixed nuts + Cheese cube',            kcal: Math.round(calories * 0.12) },
-      { time: 'Dinner',    name: isVeg ? 'Dal with ghee + Stir-fried veggies'     : 'Fish curry with low-carb veggies',   kcal: Math.round(calories * 0.25) },
+  const isVeg = activePref === 'veg';
+
+  return {
+    ...backendPlan,
+    macros: {
+      protein: backendPlan.totalProtein || 0,
+      carbs: backendPlan.totalCarb || 0,
+      fat: backendPlan.totalFat || 0,
+    },
+    meals: [
+      { time: 'Breakfast', name: breakfast.mealName || 'Breakfast', description: breakfast.mealDescription || '', kcal: breakfast.calories || 0 },
+      { time: 'Lunch', name: lunch.mealName || 'Lunch', description: lunch.mealDescription || '', kcal: lunch.calories || 0 },
+      { time: 'Snack', name: snacks.mealName || 'Snack', description: snacks.mealDescription || '', kcal: snacks.calories || 0 },
+      { time: 'Post Workout', name: postWorkout.mealName || 'Post Workout', description: postWorkout.mealDescription || '', kcal: postWorkout.calories || 0 },
+      { time: 'Dinner', name: dinner.mealName || 'Dinner', description: dinner.mealDescription || '', kcal: dinner.calories || 0 },
     ],
-    high_carb: [
-      { time: 'Breakfast', name: 'Oatmeal with banana + Honey',                                                           kcal: Math.round(calories * 0.25) },
-      { time: 'Lunch',     name: isVeg ? 'Brown rice + Dal + Sabzi'               : 'Brown rice + Grilled chicken + Veggies', kcal: Math.round(calories * 0.35) },
-      { time: 'Snack',     name: 'Fruit bowl + Whole wheat toast',                                                        kcal: Math.round(calories * 0.15) },
-      { time: 'Dinner',    name: isVeg ? 'Roti + Rajma + Salad'                   : 'Roti + Chicken curry + Salad',       kcal: Math.round(calories * 0.25) },
-    ],
-    high_protein: [
-      { time: 'Breakfast', name: isVeg ? 'Greek yogurt + Paneer bhurji'           : '3 Eggs omelette + Protein shake',   kcal: Math.round(calories * 0.25) },
-      { time: 'Lunch',     name: isVeg ? 'Chickpea bowl + Quinoa + Tofu'          : 'Grilled chicken + Quinoa + Veggies', kcal: Math.round(calories * 0.35) },
-      { time: 'Snack',     name: isVeg ? 'Cottage cheese + Nuts'                  : 'Boiled eggs + Almonds',             kcal: Math.round(calories * 0.12) },
-      { time: 'Dinner',    name: isVeg ? 'Lentil soup + Paneer tikka'             : 'Fish + Stir-fried veggies + Brown rice', kcal: Math.round(calories * 0.28) },
-    ],
-    balanced: [
-      { time: 'Breakfast', name: isVeg ? 'Oats + Paneer + Fruits'                 : 'Oats + Eggs + Fruits',              kcal: Math.round(calories * 0.25) },
-      { time: 'Lunch',     name: isVeg ? 'Roti + Dal + Sabzi + Curd'             : 'Rice + Chicken curry + Salad',       kcal: Math.round(calories * 0.35) },
-      { time: 'Snack',     name: 'Handful of nuts + Fruit',                                                               kcal: Math.round(calories * 0.12) },
-      { time: 'Dinner',    name: isVeg ? 'Brown rice + Rajma + Salad'             : 'Roti + Fish + Stir-fried veggies',  kcal: Math.round(calories * 0.28) },
-    ],
+    proteinSources: isVeg
+      ? ['Paneer', 'Tofu', 'Lentils (dal)', 'Chickpeas', 'Greek yogurt', 'Cottage cheese', 'Eggs']
+      : ['Chicken breast', 'Eggs', 'Fish (salmon/tuna)', 'Lean beef', 'Paneer', 'Shrimp', 'Turkey'],
+    carbSources: ['Brown rice', 'Oats', 'Sweet potato', 'Quinoa', 'Whole wheat roti', 'Banana', 'Fruits'],
+    fatSources: ['Avocado', 'Almonds', 'Walnuts', 'Olive oil', 'Ghee (small amount)', 'Flaxseeds', 'Chia seeds'],
+    tips: activeGoal === 'lose'
+      ? ['Eat slowly — it takes 20 min to feel full', 'Prioritise protein at every meal', 'Avoid liquid calories (juices, sodas)', 'Stay hydrated — aim for 3 L water/day']
+      : activeGoal === 'gain'
+      ? ['Eat every 3–4 hours', 'Add calorie-dense foods like nuts, avocado', 'Consume protein within 1 hr post-workout', "Don't skip meals — consistency is key"]
+      : ['Match portion size to activity level', 'Focus on whole, unprocessed foods', 'Balance all 3 macros each meal', 'Get 7–8 hrs sleep for recovery'],
   };
-
-  const tips = goal === 'lose'
-    ? ['Eat slowly — it takes 20 min to feel full', 'Prioritise protein at every meal', 'Avoid liquid calories (juices, sodas)', 'Stay hydrated — aim for 3 L water/day']
-    : goal === 'gain'
-    ? ['Eat every 3–4 hours', 'Add calorie-dense foods like nuts, avocado', 'Consume protein within 1 hr post-workout', "Don't skip meals — consistency is key"]
-    : ['Match portion size to activity level', 'Focus on whole, unprocessed foods', 'Balance all 3 macros each meal', 'Get 7–8 hrs sleep for recovery'];
-
-  return { macros, meals: mealTemplates[style] || mealTemplates.balanced, proteinSources, carbSources, fatSources, tips };
 }
 
 // ─── Shared sub-components ────────────────────────────────────────────────────
@@ -180,16 +180,71 @@ function OptionChip({ label, sublabel, icon: Icon, active, color, onPress, color
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function DietScreen() {
-  const { colors, profile } = useAppContext();
+  const { colors, profile, showAlert, onRefresh, refreshing, setGlobalLoading } = useAppContext();
   const styles = getMemberStyles(colors);
   const insets = useSafeAreaInsets();
   const member = profile?.member || {};
+  const isExpired = member.expiryDate ? new Date(member.expiryDate) < new Date() : true;
+  const isActive = member.status === 'active';
+  const hasDietAccess = member.hasDietAccess === true;
+  const isAccessAllowed = isActive && !isExpired && hasDietAccess;
+
+  const limit = member.dietGenerationDailyLimit ?? 3;
+  const getRemainingGenerations = () => {
+    if (!member.lastDietGeneratedAt) return limit;
+    try {
+      const todayStr = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
+      const lastGeneratedStr = new Date(member.lastDietGeneratedAt).toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata' });
+      if (todayStr === lastGeneratedStr) {
+        return Math.max(0, limit - (member.dietGenerationCountToday ?? 0));
+      }
+    } catch (e) {
+      console.warn('Error calculating remaining diet limit:', e);
+    }
+    return limit;
+  };
+  const remaining = getRemainingGenerations();
+
+  const getLockDetails = () => {
+    if (!isActive) {
+      return {
+        icon: AlertCircle,
+        color: '#e74c3c',
+        title: 'Account Inactive',
+        text: 'Your membership account is not active. Please contact your gym owner to activate your profile.',
+      };
+    }
+    if (isExpired) {
+      return {
+        icon: Flame,
+        color: '#f39c12',
+        title: 'Membership Expired',
+        text: member.expiryDate
+          ? `Your membership expired on ${new Date(member.expiryDate).toLocaleDateString(undefined, {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}. Please renew your membership to generate diet plans.`
+          : 'Your membership has expired. Please renew your membership to generate diet plans.',
+      };
+    }
+    return {
+      icon: Salad,
+      color: colors.accent,
+      title: 'Diet Access Restricted',
+      text: 'To unlock customized meal planning and macro tracking, please contact your gym owner to enable Diet Access on your profile.',
+    };
+  };
+
+  const lockDetails = getLockDetails();
+  const LockIcon = lockDetails.icon;
+
   const s = localStyles(colors);
   const navigation = useNavigation();
 
   // ── storage keys ──
-  const bmiKey      = `bmi_calc_result_${member.phone || 'guest'}`;
-  const dietPlanKey = `diet_plan_${member.phone || 'guest'}`;
+  const bmiKey      = member._id ? `bmi_calc_result_${member._id}` : null;
+  const dietPlanKey = member._id ? `diet_plan_${member._id}` : null;
 
   // ── state ──
   const [tdee, setTdee] = useState(null);
@@ -201,9 +256,13 @@ export default function DietScreen() {
   const [dietStyle, setDietStyle] = useState(null);
   const [foodPref, setFoodPref]   = useState(null);
   const [plan, setPlan]           = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [replacingMealTime, setReplacingMealTime] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // ── Sync TDEE and update plan if necessary ──
   const syncTdee = useCallback(async () => {
+    if (!bmiKey) return;
     try {
       const bmiRaw = await AsyncStorage.getItem(bmiKey);
       let latestTdee = null;
@@ -223,44 +282,45 @@ export default function DietScreen() {
         setFoodPref(null);
         setPlan(null);
         setStep(1);
+        setIsGenerating(false);
         try {
           await AsyncStorage.removeItem(dietPlanKey);
         } catch {}
         return;
       }
 
-      setTdee((prevTdee) => {
-        if (prevTdee !== latestTdee) {
-          // TDEE has changed! Regenerate the active plan if one exists
-          setPlan((prevPlan) => {
-            if (prevPlan && goal && dietStyle && foodPref) {
-              const newRateValue = goal !== 'maintain' ? (RATE_OPTIONS[goal]?.[rateIdx]?.value ?? 0) : 0;
-              const newTargetCal = latestTdee + newRateValue;
-              const newPlan = generatePlan(goal, newTargetCal, dietStyle, foodPref);
-              
-              // Update local storage too
-              AsyncStorage.setItem(
-                dietPlanKey,
-                JSON.stringify({
-                  goal,
-                  rateIdx,
-                  dietStyle,
-                  foodPref,
-                  plan: newPlan,
-                  planTdee: latestTdee,
-                })
-              ).catch(() => {});
-
-              return newPlan;
-            }
-            return prevPlan;
+      if (tdee !== latestTdee) {
+        // TDEE has changed! Show alert to let the user regenerate from 1st step if they have a plan
+        if (plan && goal && dietStyle && foodPref) {
+          showAlert({
+            title: 'Calorie Metrics Updated',
+            message: 'Your BMI & calorie metrics have changed. Please regenerate your diet plan to match your new daily calorie targets.',
+            type: 'info',
+            buttons: [
+              {
+                text: 'Regenerate',
+                onPress: async () => {
+                  setTdee(latestTdee);
+                  setGoal(null);
+                  setRateIdx(0);
+                  setDietStyle(null);
+                  setFoodPref(null);
+                  setPlan(null);
+                  setStep(1);
+                  setIsGenerating(false);
+                  try {
+                    await AsyncStorage.removeItem(dietPlanKey);
+                  } catch {}
+                }
+              }
+            ]
           });
-          return latestTdee;
+        } else {
+          setTdee(latestTdee);
         }
-        return prevTdee;
-      });
+      }
     } catch { /* ignore */ }
-  }, [bmiKey, dietPlanKey, goal, rateIdx, dietStyle, foodPref]);
+  }, [bmiKey, dietPlanKey, goal, rateIdx, dietStyle, foodPref, tdee, plan, onRefresh]);
 
   // Sync TDEE on screen focus
   useEffect(() => {
@@ -272,6 +332,7 @@ export default function DietScreen() {
 
   // ── load TDEE + restore saved plan ──
   useEffect(() => {
+    if (!bmiKey || !dietPlanKey) return;
     (async () => {
       try {
         // Load TDEE from Tools screen cache
@@ -281,39 +342,46 @@ export default function DietScreen() {
           const parsed = JSON.parse(bmiRaw);
           if (parsed?.tdee) {
             latestTdee = parsed.tdee;
-            setTdee(latestTdee);
           }
         }
 
-        // Restore previously generated diet plan
+        if (latestTdee !== null) {
+          setTdee(latestTdee);
+        }
+
+        // 1. Try to fetch from local storage first
         const planRaw = await AsyncStorage.getItem(dietPlanKey);
+        let restored = false;
+
         if (planRaw) {
           const saved = JSON.parse(planRaw);
-          if (saved?.plan) {
+          if (saved?.plan && saved.plan._id) {
             const savedTdee = saved.planTdee;
             
-            // If TDEE changed while app was closed or key is missing, auto-regenerate
             if (latestTdee !== null && savedTdee !== latestTdee) {
-              const rateVal = saved.goal !== 'maintain' ? (RATE_OPTIONS[saved.goal]?.[saved.rateIdx ?? 0]?.value ?? 0) : 0;
-              const targetCal = latestTdee + rateVal;
-              const updatedPlan = generatePlan(saved.goal, targetCal, saved.dietStyle, saved.foodPref);
-              
-              setGoal(saved.goal);
-              setRateIdx(saved.rateIdx ?? 0);
-              setDietStyle(saved.dietStyle);
-              setFoodPref(saved.foodPref);
-              setPlan(updatedPlan);
-              setStep(5);
-
-              const payload = {
-                goal: saved.goal,
-                rateIdx: saved.rateIdx ?? 0,
-                dietStyle: saved.dietStyle,
-                foodPref: saved.foodPref,
-                plan: updatedPlan,
-                planTdee: latestTdee,
-              };
-              await AsyncStorage.setItem(dietPlanKey, JSON.stringify(payload));
+              // Show the alert and let them regenerate!
+              showAlert({
+                title: 'Calorie Metrics Updated',
+                message: 'Your BMI & calorie metrics have changed. Please regenerate your diet plan to match your new daily calorie targets.',
+                type: 'info',
+                buttons: [
+                  {
+                    text: 'Regenerate',
+                    onPress: async () => {
+                      setGoal(null);
+                      setRateIdx(0);
+                      setDietStyle(null);
+                      setFoodPref(null);
+                      setPlan(null);
+                      setStep(1);
+                      setIsGenerating(false);
+                      try {
+                        await AsyncStorage.removeItem(dietPlanKey);
+                      } catch {}
+                    }
+                  }
+                ]
+              });
             } else {
               setGoal(saved.goal);
               setRateIdx(saved.rateIdx ?? 0);
@@ -321,13 +389,64 @@ export default function DietScreen() {
               setFoodPref(saved.foodPref);
               setPlan(saved.plan);
               setStep(5);
+              restored = true;
             }
+          }
+        }
+
+        // 2. Fallback to fetching from backend if not restored from local storage
+        if (!restored) {
+          let savedPlan = null;
+          try {
+            savedPlan = await memberApi.getDietPlan();
+          } catch (err) {
+            console.error("Failed to load plan from backend:", err);
+          }
+
+          if (savedPlan && savedPlan._id) {
+            const mapped = mapBackendPlan(savedPlan);
+            const activeGoal = savedPlan.goal || 'maintain';
+            const activeStyle = savedPlan.dietStyle || 'balanced';
+            const activePref = savedPlan.dietType || 'veg';
+
+            // Match/infer rateIdx
+            let matchedRateIdx = 0;
+            if (activeGoal !== 'maintain' && latestTdee !== null) {
+              const calDiff = (savedPlan.totalCalories || 0) - latestTdee;
+              const options = RATE_OPTIONS[activeGoal] || [];
+              let minDiff = Infinity;
+              options.forEach((opt, idx) => {
+                const diff = Math.abs(opt.value - calDiff);
+                if (diff < minDiff) {
+                  minDiff = diff;
+                  matchedRateIdx = idx;
+                }
+              });
+            }
+
+            setGoal(activeGoal);
+            setRateIdx(matchedRateIdx);
+            setDietStyle(activeStyle);
+            setFoodPref(activePref);
+            setPlan(mapped);
+            setStep(5);
+
+            // Update local cache
+            const payload = {
+              goal: activeGoal,
+              rateIdx: matchedRateIdx,
+              dietStyle: activeStyle,
+              foodPref: activePref,
+              plan: mapped,
+              planTdee: latestTdee,
+            };
+            await AsyncStorage.setItem(dietPlanKey, JSON.stringify(payload));
           }
         }
       } catch { /* ignore */ }
       finally { setLoadingCalorie(false); }
     })();
-  }, [member.phone]);
+  }, [member._id, member.phone, bmiKey, dietPlanKey]);
 
   // ── derived ──
   const rateValue = goal && goal !== 'maintain' ? (RATE_OPTIONS[goal]?.[rateIdx]?.value ?? 0) : 0;
@@ -352,6 +471,64 @@ export default function DietScreen() {
 
   const advanceTo = (nextStep) => setStep(nextStep);
 
+  const handleRefresh = async () => {
+    setGlobalLoading(true);
+    try {
+      // 1. Refetch the member profile details from backend
+      await onRefresh();
+
+      // 2. Fetch current diet plan from the backend API directly
+      let savedPlan = null;
+      try {
+        savedPlan = await memberApi.getDietPlan();
+      } catch (err) {
+        console.error("Failed to load plan from backend:", err);
+      }
+
+      if (savedPlan && savedPlan._id) {
+        const mapped = mapBackendPlan(savedPlan);
+        const activeGoal = savedPlan.goal || 'maintain';
+        const activeStyle = savedPlan.dietStyle || 'balanced';
+        const activePref = savedPlan.dietType || 'veg';
+
+        // Match/infer rateIdx
+        let matchedRateIdx = 0;
+        if (activeGoal !== 'maintain' && tdee !== null) {
+          const calDiff = (savedPlan.totalCalories || 0) - tdee;
+          const options = RATE_OPTIONS[activeGoal] || [];
+          let minDiff = Infinity;
+          options.forEach((opt, idx) => {
+            const diff = Math.abs(opt.value - calDiff);
+            if (diff < minDiff) {
+              minDiff = diff;
+              matchedRateIdx = idx;
+            }
+          });
+        }
+
+        setGoal(activeGoal);
+        setRateIdx(matchedRateIdx);
+        setDietStyle(activeStyle);
+        setFoodPref(activePref);
+        setPlan(mapped);
+        setStep(5);
+
+        // Update local cache
+        const payload = {
+          goal: activeGoal,
+          rateIdx: matchedRateIdx,
+          dietStyle: activeStyle,
+          foodPref: activePref,
+          plan: mapped,
+          planTdee: tdee,
+        };
+        await AsyncStorage.setItem(dietPlanKey, JSON.stringify(payload));
+      }
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
+
   // ── handlers ──
   const onSelectGoal = (key) => {
     setGoal(key);
@@ -371,18 +548,171 @@ export default function DietScreen() {
     advanceTo(4);
   };
 
-  const onSelectFoodPref = async (key) => {
-    const targetCal = tdee + (goal === 'maintain' ? 0 : rateValue);
-    const p = generatePlan(goal, targetCal, dietStyle, key);
-    setFoodPref(key);
-    setPlan(p);
-    advanceTo(5);
-
-    // Persist the full wizard state + generated plan with the TDEE it was generated for
+  const restoreLastPlan = async () => {
+    setActionLoading(true);
     try {
+      // 1. Try to fetch from local storage first
+      const planRaw = await AsyncStorage.getItem(dietPlanKey);
+      let restoredFromLocal = false;
+
+      if (planRaw) {
+        const saved = JSON.parse(planRaw);
+        if (saved?.plan && saved.plan._id) {
+          setGoal(saved.goal);
+          setRateIdx(saved.rateIdx ?? 0);
+          setDietStyle(saved.dietStyle);
+          setFoodPref(saved.foodPref);
+          setPlan(saved.plan);
+          setStep(5);
+          restoredFromLocal = true;
+        }
+      }
+
+      // 2. Fallback to fetching from backend if not available locally
+      if (!restoredFromLocal) {
+        let savedPlan = null;
+        try {
+          savedPlan = await memberApi.getDietPlan();
+        } catch (err) {
+          console.error("Failed to load plan from backend:", err);
+        }
+
+        if (savedPlan && savedPlan._id) {
+          const mapped = mapBackendPlan(savedPlan);
+          const activeGoal = savedPlan.goal || 'maintain';
+          const activeStyle = savedPlan.dietStyle || 'balanced';
+          const activePref = savedPlan.dietType || 'veg';
+
+          // Match/infer rateIdx
+          let matchedRateIdx = 0;
+          if (activeGoal !== 'maintain' && tdee !== null) {
+            const calDiff = (savedPlan.totalCalories || 0) - tdee;
+            const options = RATE_OPTIONS[activeGoal] || [];
+            let minDiff = Infinity;
+            options.forEach((opt, idx) => {
+              const diff = Math.abs(opt.value - calDiff);
+              if (diff < minDiff) {
+                minDiff = diff;
+                matchedRateIdx = idx;
+              }
+            });
+          }
+
+          setGoal(activeGoal);
+          setRateIdx(matchedRateIdx);
+          setDietStyle(activeStyle);
+          setFoodPref(activePref);
+          setPlan(mapped);
+          setStep(5);
+
+          // Update local cache
+          const payload = {
+            goal: activeGoal,
+            rateIdx: matchedRateIdx,
+            dietStyle: activeStyle,
+            foodPref: activePref,
+            plan: mapped,
+            planTdee: tdee,
+          };
+          await AsyncStorage.setItem(dietPlanKey, JSON.stringify(payload));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to restore last diet plan:', err);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const onSelectFoodPref = async (key) => {
+    setActionLoading(true);
+    try {
+      const targetCal = tdee + (goal === 'maintain' ? 0 : rateValue);
+      const backendPlan = await memberApi.generateDietPlan({
+        calorieRequirement: targetCal,
+        goal,
+        dietType: key,
+        dietStyle,
+      });
+      const p = mapBackendPlan(backendPlan, goal, dietStyle, key);
+      setFoodPref(key);
+      setPlan(p);
+      advanceTo(5);
+
+      // Persist the full wizard state + generated plan with the TDEE it was generated for
       const payload = { goal, rateIdx, dietStyle, foodPref: key, plan: p, planTdee: tdee };
       await AsyncStorage.setItem(dietPlanKey, JSON.stringify(payload));
-    } catch { /* ignore */ }
+      await onRefresh();
+    } catch (err) {
+      showAlert({
+        title: 'Generation Failed',
+        message: err.message || 'Failed to generate diet plan',
+        type: 'error',
+        buttons: [
+          {
+            text: 'OK',
+            onPress: () => {
+              restoreLastPlan();
+            },
+          },
+        ],
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReplaceMeal = async (timeLabel) => {
+    if (!plan) return;
+
+    let slotKey = timeLabel.toLowerCase();
+    if (slotKey === 'snack') {
+      slotKey = 'snacks';
+    } else if (slotKey === 'post workout') {
+      slotKey = 'postWorkout';
+    }
+    
+    setReplacingMealTime(timeLabel);
+    try {
+      let activePlanId = plan._id;
+
+      // Self-healing check: if the plan has no _id (legacy cached plan), generate it on backend first!
+      if (!activePlanId) {
+        console.log('No backend ID found. Registering plan on the backend first...');
+        const targetCal = tdee + (goal === 'maintain' ? 0 : rateValue);
+        const generated = await memberApi.generateDietPlan({
+          calorieRequirement: targetCal,
+          goal,
+          dietType: foodPref,
+          dietStyle,
+        });
+        activePlanId = generated._id;
+        // Keep the generated plan in state to sync it
+        const mappedGenerated = mapBackendPlan(generated, goal, dietStyle, foodPref);
+        setPlan(mappedGenerated);
+      }
+
+      const updatedBackendPlan = await memberApi.replaceDietMeal({
+        dietPlanId: activePlanId,
+        mealTime: slotKey,
+      });
+
+      const updatedPlan = mapBackendPlan(updatedBackendPlan, goal, dietStyle, foodPref);
+      setPlan(updatedPlan);
+
+      // Update local storage too
+      const payload = { goal, rateIdx, dietStyle, foodPref, plan: updatedPlan, planTdee: tdee };
+      await AsyncStorage.setItem(dietPlanKey, JSON.stringify(payload));
+    } catch (err) {
+      showAlert({
+        title: 'Failed to Replace Meal',
+        message: err.message || 'Failed to replace meal',
+        type: 'error',
+         buttons: [{ text: 'OK' }],
+      });
+    } finally {
+      setReplacingMealTime(null);
+    }
   };
 
   const handleReset = async () => {
@@ -392,6 +722,7 @@ export default function DietScreen() {
     setFoodPref(null);
     setPlan(null);
     setStep(1);
+    setIsGenerating(false);
 
     // Clear persisted plan
     try {
@@ -460,7 +791,8 @@ export default function DietScreen() {
   const renderProgressBar = () => (
     <View style={s.progressWrap}>
       {STEPS.map((label, i) => {
-        const done = i < displayStep;
+        const isLastStep = i === STEPS.length - 1;
+        const done = i < displayStep || (isLastStep && step === 5 && !!plan);
         const active = i === displayStep;
         return (
           <React.Fragment key={label}>
@@ -629,24 +961,37 @@ export default function DietScreen() {
               </View>
             ))}
           </View>
-          <Text style={s.macroTarget}>Total: {targetCalories?.toLocaleString()} kcal / day</Text>
+          <Text style={s.macroTarget}>Total: {plan.totalCalories?.toLocaleString()} kcal / day</Text>
         </View>
 
         {/* Meals */}
         <View style={s.planCard}>
           <View style={s.planCardHeader}>
             <Flame color="#FF6B35" size={20} />
-            <Text style={s.planCardTitle}>Sample Meal Plan</Text>
+            <Text style={s.planCardTitle}>Meal Plan</Text>
           </View>
           {plan.meals.map((meal, i) => (
-            <View key={meal.time} style={[s.mealRow, i === plan.meals.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={s.mealTimePill}>
-                <Text style={s.mealTimeText}>{meal.time}</Text>
-              </View>
+            <View key={meal.time} style={[s.mealRow, i === plan.meals.length - 1 && { borderBottomWidth: 0 }, { alignItems: 'center' }]}>
               <View style={{ flex: 1 }}>
+                <View style={[s.mealTimePill, { alignSelf: 'flex-start', marginBottom: 6 }]}>
+                  <Text style={s.mealTimeText}>{meal.time}</Text>
+                </View>
                 <Text style={s.mealName}>{meal.name}</Text>
+                {meal.description ? <Text style={s.mealDesc}>{meal.description}</Text> : null}
                 <Text style={s.mealKcal}>~{meal.kcal} kcal</Text>
               </View>
+              <TouchableOpacity
+                style={s.replaceBtn}
+                onPress={() => handleReplaceMeal(meal.time)}
+                activeOpacity={0.7}
+                disabled={replacingMealTime !== null}
+              >
+                {replacingMealTime === meal.time ? (
+                  <ActivityIndicator size="small" color={colors.accent} />
+                ) : (
+                  <RefreshCw color={colors.accent} size={14} strokeWidth={2.4} />
+                )}
+              </TouchableOpacity>
             </View>
           ))}
         </View>
@@ -697,6 +1042,46 @@ export default function DietScreen() {
     );
   };
 
+  const renderNoBmiScreen = () => (
+    <View style={s.lockCard}>
+      <View style={[s.lockIconWrap, { backgroundColor: `${colors.accent}15` }]}>
+        <Scale color={colors.accent} size={48} strokeWidth={1.5} />
+      </View>
+      <Text style={s.lockTitle}>No BMI & Calorie Data Present</Text>
+      <Text style={s.lockText}>
+        Please calculate your BMI & daily calorie expenditure first to generate and view customized diet plans.
+      </Text>
+      <TouchableOpacity
+        style={[s.calculateBtn, { width: '100%', marginTop: 24 }]}
+        activeOpacity={0.75}
+        onPress={() => navigation.navigate('Tools')}
+      >
+        <Calculator color="#FFF" size={18} strokeWidth={2.4} />
+        <Text style={s.calculateBtnText}>Calculate in Tools</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  const renderNoDietPlanScreen = () => (
+    <View style={s.lockCard}>
+      <View style={[s.lockIconWrap, { backgroundColor: '#FF6B3515' }]}>
+        <ChefHat color="#FF6B35" size={48} strokeWidth={1.5} />
+      </View>
+      <Text style={s.lockTitle}>No Diet Plan is Generated Yet</Text>
+      <Text style={s.lockText}>
+        Generate a fully customized meal plan matching your macro and daily calorie requirements.
+      </Text>
+      <TouchableOpacity
+        style={[s.calculateBtn, { width: '100%', marginTop: 24, backgroundColor: colors.accent }]}
+        activeOpacity={0.75}
+        onPress={() => setIsGenerating(true)}
+      >
+        <Sparkles color="#FFF" size={18} strokeWidth={2.4} />
+        <Text style={s.calculateBtnText}>Generate the Diet Plan</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   // ─── Main render ──────────────────────────────────────────────────────────
 
   return (
@@ -706,24 +1091,68 @@ export default function DietScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 112 }]}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.accent}
+          />
+        }
       >
         {/* Screen title */}
         <View style={styles.topBar}>
-          <View>
-            <Text style={styles.screenKicker}>Nutrition</Text>
-            <Text style={styles.screenTitle}>Diet Planner</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', width: '100%', flexWrap: 'wrap', gap: 8 }}>
+            <View>
+              <Text style={styles.screenTitle}>Diet Planner</Text>
+            </View>
+            {isAccessAllowed && (
+              <View style={{ marginBottom: 4, backgroundColor: `${colors.accent}12`, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: `${colors.accent}30` }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: colors.textSecondary }}>
+                  Generations left: <Text style={{ color: colors.accent, fontWeight: '900' }}>{remaining} / {limit}</Text>
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Progress bar (hidden on step 1 before goal selected) */}
-        {(step > 1 || goal) && tdee != null && renderProgressBar()}
+        {!isAccessAllowed ? (
+          <View style={s.lockCard}>
+            <View style={[s.lockIconWrap, { backgroundColor: `${lockDetails.color}15` }]}>
+              <LockIcon color={lockDetails.color} size={48} strokeWidth={1.5} />
+            </View>
+            <Text style={s.lockTitle}>{lockDetails.title}</Text>
+            <Text style={s.lockText}>{lockDetails.text}</Text>
+          </View>
+        ) : loadingCalorie ? (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 250 }}>
+            <ActivityIndicator size="large" color={colors.accent} />
+          </View>
+        ) : tdee === null ? (
+          renderNoBmiScreen()
+        ) : !plan && !isGenerating ? (
+          renderNoDietPlanScreen()
+        ) : (
+          <>
+            {/* Progress bar (hidden on step 1 before goal selected) */}
+            {(step > 1 || goal) && tdee != null && renderProgressBar()}
 
-        {/* Step content */}
-        {step === 1 && renderStep1()}
-        {step === 2 && renderStep2()}
-        {step === 3 && renderStep3()}
-        {step === 4 && renderStep4()}
-        {step === 5 && renderStep5()}
+            {/* Step content */}
+            {actionLoading ? (
+              <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 250 }}>
+                <ActivityIndicator size="large" color={colors.accent} />
+                <Text style={{ marginTop: 16, color: colors.textSecondary, fontWeight: '700' }}>Generating diet plan...</Text>
+              </View>
+            ) : (
+              <>
+                {step === 1 && renderStep1()}
+                {step === 2 && renderStep2()}
+                {step === 3 && renderStep3()}
+                {step === 4 && renderStep4()}
+                {step === 5 && renderStep5()}
+              </>
+            )}
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -733,6 +1162,39 @@ export default function DietScreen() {
 
 const localStyles = (colors) =>
   StyleSheet.create({
+    lockCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 30,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 20,
+    },
+    lockIconWrap: {
+      width: 90,
+      height: 90,
+      borderRadius: 45,
+      backgroundColor: `${colors.accent}15`,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 20,
+    },
+    lockTitle: {
+      fontSize: 22,
+      fontWeight: '900',
+      color: colors.textPrimary,
+      textAlign: 'center',
+      marginBottom: 10,
+    },
+    lockText: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 22,
+      fontWeight: '600',
+    },
     // ── Progress bar ──
     progressWrap: {
       flexDirection: 'row',
@@ -1009,11 +1471,30 @@ const localStyles = (colors) =>
       fontWeight: '700',
       lineHeight: 20,
     },
+    mealDesc: {
+      color: colors.textSecondary,
+      fontSize: 12,
+      fontWeight: '500',
+      marginTop: 2,
+      lineHeight: 16,
+    },
     mealKcal: {
       color: colors.textMuted,
       fontSize: 12,
       fontWeight: '700',
       marginTop: 2,
+    },
+    replaceBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: `${colors.accent}12`,
+      borderWidth: 1,
+      borderColor: `${colors.accent}25`,
+      alignItems: 'center',
+      justifyContent: 'center',
+      alignSelf: 'center',
+      marginLeft: 8,
     },
     foodGroupLabel: {
       fontSize: 13,
@@ -1069,5 +1550,25 @@ const localStyles = (colors) =>
       color: colors.textSecondary,
       fontSize: 15,
       fontWeight: '800',
+    },
+    calculateBtn: {
+      height: 52,
+      borderRadius: 16,
+      backgroundColor: colors.accent,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      shadowColor: colors.accent,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 4,
+    },
+    calculateBtnText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '800',
+      letterSpacing: 0.5,
     },
   });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, Switch, Text, TouchableOpacity, View, Modal, TextInput, ActivityIndicator, StyleSheet } from 'react-native';
+import { ScrollView, Switch, Text, TouchableOpacity, View, Modal, TextInput, ActivityIndicator, StyleSheet, RefreshControl } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LogOut, Moon, Sun, UserRound, Lock, ChevronRight } from 'lucide-react-native';
 import { memberApi } from '../utils/api';
@@ -8,7 +8,16 @@ import { getMemberCode } from '../utils/memberUtils';
 import { useAppContext } from '../context/AppContext';
 
 export default function SettingsScreen() {
-  const { colors, profile, isDarkMode, onThemeModeChange, onLogout } = useAppContext();
+  const { colors, profile, isDarkMode, onThemeModeChange, onLogout, refreshing, onRefresh, setGlobalLoading } = useAppContext();
+
+  const handleRefresh = async () => {
+    setGlobalLoading(true);
+    try {
+      await onRefresh();
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
   const styles = getMemberStyles(colors);
   const insets = useSafeAreaInsets();
   const member = profile?.member || {};
@@ -161,10 +170,10 @@ export default function SettingsScreen() {
         style={styles.container}
         contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, 16) + 112 }]}
         contentInsetAdjustmentBehavior="automatic"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
       >
         <View style={styles.topBar}>
           <View>
-            <Text style={styles.screenKicker}>Member App</Text>
             <Text style={styles.screenTitle}>Setting</Text>
           </View>
         </View>

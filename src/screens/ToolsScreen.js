@@ -7,6 +7,7 @@ import {
   TextInput,
   StyleSheet,
   Keyboard,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -27,7 +28,7 @@ import { getMemberStyles } from '../styles/memberStyles';
 import { useAppContext } from '../context/AppContext';
 
 export default function ToolsScreen() {
-  const { colors, profile } = useAppContext();
+  const { colors, profile, showAlert, refreshing, setGlobalLoading } = useAppContext();
   const styles = getMemberStyles(colors);
   const insets = useSafeAreaInsets();
   const member = profile?.member || {};
@@ -51,13 +52,17 @@ export default function ToolsScreen() {
   ];
 
   // Dynamic storage key scoped to individual member to support multi-user security
-  const getStorageKey = () => `bmi_calc_result_${member.phone || 'guest'}`;
+  const getStorageKey = () => {
+    if (!member._id) return null;
+    return `bmi_calc_result_${member._id}`;
+  };
 
   // Load saved results on mount
   useEffect(() => {
     const loadSavedResult = async () => {
+      const key = getStorageKey();
+      if (!key) return;
       try {
-        const key = getStorageKey();
         const storedData = await AsyncStorage.getItem(key);
         if (storedData) {
           const parsed = JSON.parse(storedData);
@@ -70,6 +75,14 @@ export default function ToolsScreen() {
             setGender(parsed.inputs.gender || 'male');
             setActivityLevel(parsed.inputs.activityLevel || 'moderate');
           }
+        } else {
+          // Reset fields to member's details when switching to a gym with no saved results
+          setResult(null);
+          setHeight('');
+          setWeight('');
+          setAge(member.age ? String(member.age) : '25');
+          setGender(member.gender || 'male');
+          setActivityLevel('moderate');
         }
       } catch (err) {
         console.error('Failed to load persisted BMI result:', err);
@@ -77,7 +90,39 @@ export default function ToolsScreen() {
     };
 
     loadSavedResult();
-  }, [member.phone]);
+  }, [member._id]);
+
+  const handleRefresh = async () => {
+    const key = getStorageKey();
+    if (!key) return;
+    setGlobalLoading(true);
+    try {
+      const storedData = await AsyncStorage.getItem(key);
+      if (storedData) {
+        const parsed = JSON.parse(storedData);
+        setResult(parsed);
+        if (parsed.inputs) {
+          setHeight(parsed.inputs.height || '');
+          setWeight(parsed.inputs.weight || '');
+          setAge(parsed.inputs.age || '');
+          setGender(parsed.inputs.gender || 'male');
+          setActivityLevel(parsed.inputs.activityLevel || 'moderate');
+        }
+      } else {
+        setResult(null);
+        setHeight('');
+        setWeight('');
+        setAge(member.age ? String(member.age) : '25');
+        setGender(member.gender || 'male');
+        setActivityLevel('moderate');
+      }
+    } catch (err) {
+      console.error('Failed to load persisted BMI result:', err);
+    } finally {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      setGlobalLoading(false);
+    }
+  };
 
   const calculateBMI = async () => {
     Keyboard.dismiss();
@@ -86,7 +131,12 @@ export default function ToolsScreen() {
     const a = parseInt(age, 10);
 
     if (!h || !w || !a || h <= 0 || w <= 0 || a <= 0) {
-      alert('Please enter valid details for height, weight, and age.');
+      showAlert({
+        title: 'Invalid Input',
+        message: 'Please enter valid details for height, weight, and age.',
+        type: 'warning',
+        buttons: [{ text: 'OK' }],
+      });
       return;
     }
 
@@ -163,10 +213,13 @@ export default function ToolsScreen() {
     // Save to local storage
     try {
       const key = getStorageKey();
-      await AsyncStorage.setItem(key, JSON.stringify(newResult));
+      if (key) {
+        await AsyncStorage.setItem(key, JSON.stringify(newResult));
+      }
     } catch (err) {
-      console.error('Failed to persist BMI result:', err);
+      console.error('Failed to persist BMI result locally:', err);
     }
+
   };
 
   const resetCalculator = async () => {
@@ -180,10 +233,13 @@ export default function ToolsScreen() {
     // Remove from local storage
     try {
       const key = getStorageKey();
-      await AsyncStorage.removeItem(key);
+      if (key) {
+        await AsyncStorage.removeItem(key);
+      }
     } catch (err) {
-      console.error('Failed to clear persisted BMI result:', err);
+      console.error('Failed to clear persisted BMI result locally:', err);
     }
+
   };
 
   const localStyles = StyleSheet.create({
@@ -464,10 +520,10 @@ export default function ToolsScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
       >
         <View style={[styles.topBar, localStyles.topHeader]}>
           <View>
-            <Text style={styles.screenKicker}>Health & Fitness</Text>
             <Text style={styles.screenTitle}>BMI & Calories</Text>
           </View>
         </View>

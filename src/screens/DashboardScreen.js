@@ -41,9 +41,18 @@ import {
 import { useAppContext } from '../context/AppContext';
 
 export default function DashboardScreen() {
-  const { colors, profile, onRefresh, refreshing } = useAppContext();
+  const { colors, profile, onRefresh, refreshing, setGlobalLoading } = useAppContext();
   const styles = getMemberStyles(colors);
   const insets = useSafeAreaInsets();
+
+  const handleRefresh = async () => {
+    setGlobalLoading(true);
+    try {
+      await onRefresh();
+    } finally {
+      setGlobalLoading(false);
+    }
+  };
   const member = profile?.member || {};
   const payments = profile?.payments || [];
   const status = useMemo(() => getMembershipStatus(member), [member]);
@@ -100,7 +109,7 @@ export default function DashboardScreen() {
           { paddingBottom: Math.max(insets.bottom, 16) + 112 },
         ]}
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={colors.accent} />}
       >
         <View style={styles.dashboardHeader}>
           <View style={styles.dashboardHeaderCopy}>
@@ -271,9 +280,7 @@ export default function DashboardScreen() {
             value={plan.durationMonths ? `${plan.durationMonths} month(s)` : '-'}
             colors={colors}
           />
-          <InfoRow Icon={UserRound} label="Age" value={member.age ? String(member.age) : '-'} colors={colors} />
           <InfoRow Icon={Home} label="Emergency Contact" value={String(member.emergencyContact || '-')} colors={colors} />
-          <InfoRow Icon={MapPin} label="Address" value={member.address || '-'} colors={colors} />
         </View>
 
         <View style={styles.dashboardSection}>

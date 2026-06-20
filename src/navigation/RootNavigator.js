@@ -17,8 +17,20 @@ const Stack = createNativeStackNavigator();
  * native slide — no layout flicker from conditional rendering in App.js.
  */
 export default function RootNavigator() {
-  const { profile, colors, loading, error, phone, setPhone, password, setPassword, onLookup } =
-    useAppContext();
+  const {
+    profile,
+    colors,
+    loading,
+    error,
+    phone,
+    setPhone,
+    password,
+    setPassword,
+    onLookup,
+    multiGymProfiles,
+    onSelectGym,
+    onCancelGymSelection,
+  } = useAppContext();
 
   return (
     <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
@@ -36,6 +48,9 @@ export default function RootNavigator() {
               setPhone={setPhone}
               password={password}
               setPassword={setPassword}
+              multiGymProfiles={multiGymProfiles}
+              onSelectGym={onSelectGym}
+              onCancelGymSelection={onCancelGymSelection}
             />
           )}
         </Stack.Screen>
