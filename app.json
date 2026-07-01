@@ -26,10 +26,16 @@
         "dark": {
           "backgroundColor": "#141A22"
         }
-      }
+      },
+      "package": "com.abhimanyu248.gymsync"
     },
     "assetBundlePatterns": [
       "**/*"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "41885cfd-4fbe-4504-b431-504e729ca001"
+      }
+    }
   }
 }

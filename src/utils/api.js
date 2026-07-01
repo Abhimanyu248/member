@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// const API_BASE_URL = 'http://10.59.202.148:3000/api';
-const API_BASE_URL = 'https://backend-txff.onrender.com/api';
+// const API_BASE_URL ='http://10.59.202.148:3000/api';
+const API_BASE_URL = 'https://gymprobackend.vercel.app/api';
+// const API_BASE_URL = 'https://backend-txff.onrender.com/api';
 const LAST_PHONE_KEY = 'member_last_phone';
 const AUTH_TOKEN_KEY = 'member_auth_token';
 
